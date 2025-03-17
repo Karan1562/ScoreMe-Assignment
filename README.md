@@ -1,72 +1,188 @@
-# ScoreMe
+**Report on PDF Table Extraction and Data Processing**
 
-## PDF Table Extraction API
+## 1. Introduction
+The purpose of this project is to extract structured table data from PDF files and convert it into Excel format while preserving the table alignment and structure. Many real-world applications require automated extraction of tabular data from PDFs, making this implementation useful for data processing, financial analysis, and other structured data management needs.
 
-## Overview
-This project is a **PDF table extraction API** that allows users to upload a **PDF file**, extract tabular data, and download the extracted data in **Excel format**. It is built using **Node.js** with libraries like `express`, `pdf.js`, `multer`, and `ExcelJS`.
+This project is implemented using **Node.js** and key libraries like `express`, `multer`, `pdf.js`, and `ExcelJS`. It provides an API endpoint where users can upload a PDF file, extract table data, and download it in `.xlsx` format.
 
-Three sample PDFs have been attached for testing.
+---
 
-## Features
-- **Upload PDF files** via API
-- **Extract tabular data** while maintaining structure
-- **Download extracted tables** in Excel format
-- **Handles multiple pages and tables**
-- **API tested using Postman**
+## 2. Technologies and Libraries Used
+The following technologies and libraries were used in this project:
 
-## Technologies Used
-- **Node.js** - Backend framework
-- **Express.js** - Web framework
-- **Multer** - File upload middleware
-- **pdf.js** - Extracts text from PDF
-- **ExcelJS** - Writes extracted data to Excel
-- **Postman** - Used for API testing
+- **Node.js** - Server-side runtime environment for executing JavaScript.
+- **Express.js** - A web framework for handling API requests.
+- **Multer** - Middleware for handling file uploads.
+- **pdf.js** - Extracts text and layout information from PDF files.
+- **ExcelJS** - Creates and manipulates Excel files.
+- **Postman** - API testing tool used to send PDF files and check responses.
 
-## Installation & Setup
-Follow these steps to set up the project locally:
+GitHub Repository: [ScoreMe-Assignment](https://github.com/Karan1562/ScoreMe-Assignment)
 
-1. **Clone the repository**
-   ```sh
-   git clone https://github.com/Karan1562/ScoreMe-Assignment.git
-   cd ScoreMe-Assignment
-   ```
+Additionally, three sample PDFs have been attached to test and verify the implementation.
 
-2. **Install dependencies**
-   ```sh
-   npm install
-   ```
+---
 
-3. **Run the server**
-   ```sh
-   node index.js
-   ```
+## 3. Implementation Details
 
-4. **Server starts on `http://localhost:3000`**
+### 3.1 Setting Up the Server
+The backend is built using **Express.js** to handle file uploads and extraction.
 
-## Usage (Using Postman)
-1. Open **Postman**.
-2. Select **POST** request.
-3. Enter the API URL:
-   ```
-   http://localhost:3000/extract
-   ```
-4. Go to **Body** → Select **form-data**.
-5. Add a key **pdf** (file type) and upload a sample PDF.
-6. Click **Send**.
-7. The API will return an **Excel file** with extracted tables.
+#### **index.js - Setting up the Express Server**
+```javascript
+import express from "express";
+import multer from "multer";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import ExcelJS from "exceljs";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-## API Endpoint
-| Method | Endpoint        | Description                          |
-|--------|---------------|----------------------------------|
-| POST   | `/extract`    | Uploads PDF and extracts tables |
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-## Example Response
-- The API will return an Excel file (`.xlsx`) containing extracted tables.
+const app = express();
+const upload = multer({ dest: "uploads/" });
+const OUTPUT_DIR = path.join(__dirname, "outputs");
+if (!fs.existsSync(OUTPUT_DIR)) {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+```
 
-## Repository
-Find the complete implementation here: [GitHub Repository](https://github.com/Karan1562/ScoreMe-Assignment)
+This initializes an Express server, configures Multer for handling PDF uploads, and ensures an output directory exists for saving extracted Excel files.
 
-## Future Enhancements
-- Support for **scanned PDFs** using OCR.
-- Advanced **table structure detection** for complex layouts.
-- Web UI for easy **drag-and-drop file uploads**.
+---
+
+### 3.2 Extracting Text and Tables from PDF
+
+#### **Extracting Text with Positions**
+```javascript
+async function extractTextWithPositions(pdfPath) {
+  const data = new Uint8Array(fs.readFileSync(pdfPath));
+  const pdfDocument = await getDocument({ data }).promise;
+  let extractedData = [];
+  
+  for (let i = 1; i <= pdfDocument.numPages; i++) {
+    const page = await pdfDocument.getPage(i);
+    const textContent = await page.getTextContent();
+    const items = textContent.items.map((item) => ({
+      str: item.str.trim(),
+      x: Math.round(item.transform[4]),
+      y: Math.round(item.transform[5]),
+    }));
+    extractedData.push(items);
+  }
+  return extractedData;
+}
+```
+
+This function extracts text content from each page of the PDF along with **x, y coordinates** to help with table structure detection.
+
+#### **Detecting Tables**
+```javascript
+function detectTables(textData) {
+  let tables = [];
+  let currentTable = [];
+  let lastY = null;
+
+  textData.forEach((page) => {
+    let rows = {};
+    page.sort((a, b) => b.y - a.y || a.x - b.x);
+
+    page.forEach((item) => {
+      let yKey = Math.round(item.y / 3) * 3;
+      if (!rows[yKey]) rows[yKey] = [];
+      rows[yKey].push(item);
+    });
+
+    let table = Object.values(rows).map((row) =>
+      row.sort((a, b) => a.x - b.x).map((item) => item.str)
+    );
+
+    table = table.filter((row) => row.length > 1).reverse();
+    tables.push(table);
+  });
+
+  return tables;
+}
+```
+
+This function groups text by **Y-coordinates** to form table rows, ensuring proper alignment.
+
+---
+
+### 3.3 Saving Data to Excel
+
+```javascript
+async function saveToExcel(tables, outputPath) {
+  const workbook = new ExcelJS.Workbook();
+
+  tables.forEach((table, tableIndex) => {
+    let worksheet = workbook.addWorksheet(`Table ${tableIndex + 1}`);
+    table.forEach((row) => worksheet.addRow(row));
+  });
+
+  await workbook.xlsx.writeFile(outputPath);
+}
+```
+
+This function writes extracted table data to an Excel file with **multiple sheets**, each representing a table from the PDF.
+
+---
+
+### 3.4 API Endpoint for PDF Upload
+
+```javascript
+app.post("/extract", upload.single("pdf"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).send("No file uploaded");
+    const pdfPath = req.file.path;
+    const textData = await extractTextWithPositions(pdfPath);
+    const tables = detectTables(textData);
+    
+    if (tables.length === 0) {
+      return res.status(400).send("No tables detected in the PDF");
+    }
+    
+    const outputPath = path.join(OUTPUT_DIR, `${req.file.filename}.xlsx`);
+    await saveToExcel(tables, outputPath);
+    res.download(outputPath);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error processing file");
+  }
+});
+```
+
+This API receives a PDF file, extracts tables, saves them as an Excel file, and returns the file as a response.
+
+---
+
+## 4. Testing with Postman
+
+1. **Open Postman**
+2. Select **POST** request
+3. Enter `http://localhost:3000/extract`
+4. Go to **Body → form-data**
+5. Set key as `pdf` and choose a sample PDF file
+6. Click **Send** and download the extracted Excel file
+7. Click **Save Response to File** and save the Excel output.
+
+![Postman File Extraction](./assets/PostManCheck.png)
+
+---
+
+## 5. Included Sample PDFs and Outputs
+
+To help with testing, I have included:
+- Sample PDFs in the **assets/** folder.
+- The extracted Excel outputs for these sample PDFs are attached in the **report**.
+
+These files allow for verification of the table extraction process and ensure that the output aligns correctly.
+
+---
+
+## 6. Conclusion
+This project successfully extracts tabular data from PDFs while preserving alignment and formatting. Using `pdf.js`, we accurately determine table positions, while `ExcelJS` ensures proper structuring in Excel. Further improvements could include **OCR support for scanned PDFs** and **better handling of complex table structures**.
+
+For implementation details, visit the [GitHub Repository](https://github.com/Karan1562/ScoreMe-Assignment).
