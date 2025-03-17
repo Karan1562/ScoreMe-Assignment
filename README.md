@@ -98,9 +98,3 @@ This API receives a PDF file, extracts tables, saves them as an Excel file, and 
 ## 5. Included Sample PDFs and Outputs
 - Sample PDFs in the **assets/** folder.
 
----
-
-## 5. Conclusion
-This project successfully extracts tabular data from PDFs while preserving alignment and formatting. Using `pdf.js`, we accurately determine table positions, while `ExcelJS` ensures proper structuring in Excel. Further improvements could include **OCR support for scanned PDFs** and **better handling of complex table structures**.
-
-For implementation details, visit the [GitHub Repository](https://github.com/Karan1562/ScoreMe-Assignment).
