@@ -53,84 +53,7 @@ This initializes an Express server, configures Multer for handling PDF uploads, 
 
 ---
 
-### 3.2 Extracting Text and Tables from PDF
-
-#### **Extracting Text with Positions**
-```javascript
-async function extractTextWithPositions(pdfPath) {
-  const data = new Uint8Array(fs.readFileSync(pdfPath));
-  const pdfDocument = await getDocument({ data }).promise;
-  let extractedData = [];
-  
-  for (let i = 1; i <= pdfDocument.numPages; i++) {
-    const page = await pdfDocument.getPage(i);
-    const textContent = await page.getTextContent();
-    const items = textContent.items.map((item) => ({
-      str: item.str.trim(),
-      x: Math.round(item.transform[4]),
-      y: Math.round(item.transform[5]),
-    }));
-    extractedData.push(items);
-  }
-  return extractedData;
-}
-```
-
-This function extracts text content from each page of the PDF along with **x, y coordinates** to help with table structure detection.
-
-#### **Detecting Tables**
-```javascript
-function detectTables(textData) {
-  let tables = [];
-  let currentTable = [];
-  let lastY = null;
-
-  textData.forEach((page) => {
-    let rows = {};
-    page.sort((a, b) => b.y - a.y || a.x - b.x);
-
-    page.forEach((item) => {
-      let yKey = Math.round(item.y / 3) * 3;
-      if (!rows[yKey]) rows[yKey] = [];
-      rows[yKey].push(item);
-    });
-
-    let table = Object.values(rows).map((row) =>
-      row.sort((a, b) => a.x - b.x).map((item) => item.str)
-    );
-
-    table = table.filter((row) => row.length > 1).reverse();
-    tables.push(table);
-  });
-
-  return tables;
-}
-```
-
-This function groups text by **Y-coordinates** to form table rows, ensuring proper alignment.
-
----
-
-### 3.3 Saving Data to Excel
-
-```javascript
-async function saveToExcel(tables, outputPath) {
-  const workbook = new ExcelJS.Workbook();
-
-  tables.forEach((table, tableIndex) => {
-    let worksheet = workbook.addWorksheet(`Table ${tableIndex + 1}`);
-    table.forEach((row) => worksheet.addRow(row));
-  });
-
-  await workbook.xlsx.writeFile(outputPath);
-}
-```
-
-This function writes extracted table data to an Excel file with **multiple sheets**, each representing a table from the PDF.
-
----
-
-### 3.4 API Endpoint for PDF Upload
+### 3.2 API Endpoint for PDF Upload
 
 ```javascript
 app.post("/extract", upload.single("pdf"), async (req, res) => {
@@ -173,16 +96,11 @@ This API receives a PDF file, extracts tables, saves them as an Excel file, and 
 ---
 
 ## 5. Included Sample PDFs and Outputs
-
-To help with testing, I have included:
 - Sample PDFs in the **assets/** folder.
-- The extracted Excel outputs for these sample PDFs are attached in the **report**.
-
-These files allow for verification of the table extraction process and ensure that the output aligns correctly.
 
 ---
 
-## 6. Conclusion
+## 5. Conclusion
 This project successfully extracts tabular data from PDFs while preserving alignment and formatting. Using `pdf.js`, we accurately determine table positions, while `ExcelJS` ensures proper structuring in Excel. Further improvements could include **OCR support for scanned PDFs** and **better handling of complex table structures**.
 
 For implementation details, visit the [GitHub Repository](https://github.com/Karan1562/ScoreMe-Assignment).
